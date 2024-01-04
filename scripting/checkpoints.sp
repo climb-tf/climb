@@ -2,14 +2,19 @@
 
 float g_fSaveLocation[MAXPLAYERS + 1][3];
 float g_fSaveAngles[MAXPLAYERS + 1][3];
+bool  g_bSaveDucked[MAXPLAYERS + 1];
 
 float g_fUndoTpLocation[MAXPLAYERS + 1][3];
 float g_fUndoTpAngles[MAXPLAYERS + 1][3];
+bool  g_bUndoDucked[MAXPLAYERS + 1];
 
 float g_fPrevCpLoc[MAXPLAYERS +1][10][3];
 float g_fPrevCpAng[MAXPLAYERS +1][10][3];
+bool  g_bPrevCpDucked[MAXPLAYERS + 1][10];
+
 int g_fCpIdx[MAXPLAYERS +1];
 
+int g_nDuckTicks[MAXPLAYERS + 1];
 int g_iTeleportCount[MAXPLAYERS + 1];
 
 public void Checkpoints_RegisterCommands()
@@ -38,6 +43,11 @@ public Action Command_UndoTeleport(int client, int args)
     }
 
     Checkpoints_TeleportLoc(client, g_fUndoTpLocation[client], g_fUndoTpAngles[client]);
+    if( g_bUndoDucked[client] )
+      g_nDuckTicks[client] = 3;
+    else
+      g_nDuckTicks[client] = 0;
+
     return Plugin_Handled;
 }
 
@@ -68,6 +78,12 @@ public Action Command_Teleport(int client, int iArgs)
     }
 
     g_iTeleportCount[client]++;
+    if( g_bSaveDucked[client] ) {
+      g_nDuckTicks[client] = 3;
+    }
+    else {
+      g_nDuckTicks[client] = 0;
+    }
 
     Checkpoints_Teleport(client);
 
@@ -86,11 +102,6 @@ public void Checkpoints_SaveLocation(int client)
         return;
     }
 
-    if (GetEntityFlags(client) & FL_DUCKING) {
-        Chat_SendMessage(client, "You cannot save a checkpoint while crouched.");
-        return;
-    }
-
     //Moves all checkpoints up an element
     for(int i = 0; i < 9; i++)
     {
@@ -98,13 +109,16 @@ public void Checkpoints_SaveLocation(int client)
 
         g_fPrevCpLoc[client][idx] = g_fPrevCpLoc[client][idx - 1];
         g_fPrevCpAng[client][idx] = g_fPrevCpAng[client][idx - 1];
+        g_bPrevCpDucked[client][idx] = g_bPrevCpDucked[client][idx - 1];
     }
 
     g_fPrevCpLoc[client][0] = g_fSaveLocation[client];
     g_fPrevCpAng[client][0] = g_fSaveAngles[client];
+    g_bPrevCpDucked[client][0] = g_bSaveDucked[client];
 
     GetClientAbsOrigin(client, g_fSaveLocation[client]);
     GetClientEyeAngles(client, g_fSaveAngles[client]);
+    g_bSaveDucked[client] = !!GetEntProp(client, Prop_Send, "m_bDucked");
 
     g_fCpIdx[client] = 0;
 }
@@ -126,6 +140,11 @@ public void Checkpoints_PrevTeleport(int client)
         g_fCpIdx[client] = 0;
         return;
     }
+
+    if( g_bPrevCpDucked[client][idx] )
+      g_nDuckTicks[client] = 3;
+    else
+      g_nDuckTicks[client] = 0;
 
     Checkpoints_TeleportLoc(client, g_fPrevCpLoc[client][idx], g_fPrevCpAng[client][idx]);
 }
@@ -151,8 +170,11 @@ static void Checkpoints_TeleportLoc(int client, float origin[3], float angles[3]
 
         TeleportEntity(client, origin, angles, fVelocity);
 
+        bool ducked = !!GetEntProp(client, Prop_Send, "m_bDucked");
+
         g_fUndoTpLocation[client] = cachedLocation;
         g_fUndoTpAngles[client] = cachedAngles;
+        g_bUndoDucked[client] = ducked;
 
         //Chat_SendMessage(client, "You have been teleported.");
     }
@@ -167,16 +189,40 @@ public void Checkpoints_Reset(int client)
 {
     g_fSaveLocation[client] = {0.0, 0.0, 0.0};
     g_fSaveAngles[client] = {0.0, 0.0, 0.0};
+    g_bSaveDucked[client] = false;
 
     for(int i = 0; i < 10; i++)
     {
         g_fPrevCpLoc[client][i] = {0.0, 0.0, 0.0};
         g_fPrevCpAng[client][i] = {0.0, 0.0, 0.0};
+        g_bPrevCpDucked[client][i] = false;
     }
 
     g_fCpIdx[client] = 0;
     g_iTeleportCount[client] = 0;
+    g_nDuckTicks[client] = 0;
 
     g_fUndoTpLocation[client] = {0.0, 0.0, 0.0};
     g_fUndoTpAngles[client] = {0.0, 0.0, 0.0};
+    g_bUndoDucked[client] = false;
+}
+
+public void Checkpoints_OnPlayerRunCmd( 
+  int client, 
+  int &buttons, 
+  int &impulse, 
+  float vel[3], 
+  float angles[3], 
+  int &weapon, 
+  int &subtype, 
+  int &cmdnum, 
+  int &tickcount, 
+  int &seed, 
+  int mouse[2] 
+) {
+  if( g_nDuckTicks[client] > 0 ) {
+    SetEntProp(client, Prop_Send, "m_bDucked", 1);
+    buttons |= IN_DUCK;
+    g_nDuckTicks[client]--;
+  }
 }
