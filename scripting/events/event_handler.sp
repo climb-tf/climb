@@ -66,6 +66,7 @@ public void OnClientPutInServer(int client)
 public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3], float angles[3], int &weapon, int &subtype, int &cmdnum, int &tickcount, int &seed, int mouse[2])
 {
 	JumpTracking_OnPlayerRunCmd(client, buttons, tickcount);
+  Checkpoints_OnPlayerRunCmd(client, buttons, impulse, vel, angles, weapon, subtype, cmdnum, tickcount, seed, mouse);
 	return Plugin_Continue;
 }
 
