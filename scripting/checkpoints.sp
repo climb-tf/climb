@@ -102,10 +102,6 @@ public void Checkpoints_SaveLocation(int client)
         return;
     }
 
-    if (GetEntityFlags(client) & FL_DUCKING) {
-      g_bSaveDucked[client] = true;
-    }
-
     //Moves all checkpoints up an element
     for(int i = 0; i < 9; i++)
     {
